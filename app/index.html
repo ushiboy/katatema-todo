@@ -6,7 +6,30 @@
   <title>AMD Todo</title>
 </head>
 <body>
+  <div id="todoapp">
+
+    <div class="title">
+      <h1>Todos</h1>
+    </div>
+
+    <div class="content">
+
+      <div id="create-todo">
+        <input id="new-todo" placeholder="What needs to be done?" type="text" />
+      </div>
+
+      <div id="todos">
+        <ul id="todo-list"></ul>
+      </div>
+
+      <div id="todo-stats"></div>
+
+    </div>
+  </div>
+
+  <!-- build:js scripts/app.js -->
   <script type="text/javascript" src="bower_components/requirejs/require.js" data-main="scripts/main.js"></script>
   <script type="text/javascript" src="scripts/config.js"></script>
+  <!-- /build -->
 </body>
 </html>
