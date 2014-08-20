@@ -160,3 +160,433 @@ define([
   return TodosCollection;
 });
 ```
+
+###index.html修正
+
+bodyタグ直下にアプリケーションのメインビューになるHTML（div#todoapp）を追加する。
+
+```html
+<body>
+  <div id="todoapp">
+    <div class="title">
+      <h1>Todos</h1>
+    </div>
+
+    <div class="content">
+
+      <div id="create-todo">
+        <input id="new-todo" placeholder="What needs to be done?" type="text" />
+      </div>
+
+      <div id="todos">
+        <ul id="todo-list"></ul>
+      </div>
+
+      <div id="todo-stats"></div>
+
+    </div>
+  </div>
+
+  ...省略...
+
+</body>
+```
+
+###appビュー作成
+
+app/scripts/views/app.jsを次のように作成
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone'
+], function($, _, Backbone) {
+  'use strict';
+
+  var AppView = Backbone.View.extend({
+    el: $('#todoapp'),
+    initialize: function() {
+      this.collection.fetch();
+    }
+  });
+
+  return AppView;
+});
+```
+
+###main.jsを修正
+
+app/scripts/main.jsを次のように修正
+
+```javascript
+require([
+  'views/app',
+  'collections/todos'
+], function(AppView, TodoCollection) {
+  new AppView({
+    collection: new TodoCollection()
+  });
+});
+```
+
+###todoテンプレート作成
+
+app/scripts/templates/todo.htmlを次のように作成
+
+```html
+<div class="todo <%= done ? 'done' : '' %>">
+  <div class="display">
+    <input class="check" type="checkbox" <%= done ? 'checked="checked"' : '' %> />
+    <div class="todo-content"><%- content %></div>
+    <span class="todo-destroy"></span>
+  </div>
+  <div class="edit">
+    <input class="todo-input" type="text" value="<%- content %>" />
+  </div>
+</div>
+```
+
+###grunt-contrib-jstの設定
+
+Gruntfile.jsに次の設定を追記する
+
+```javascript
+    ...省略...
+    watch: {
+      options: {
+        nospawn: true,
+        livereload: true
+      },
+      js: {
+        files: '<%= appEnv.app %>/scripts/**/*.js'
+      },
+      html: {
+        files: ['<%= appEnv.app %>/**/*.html']
+      },
+      jst: {
+        files: ['<%= appEnv.app %>/scripts/templates/**/*.html'],
+        tasks: ['jst']
+      }
+    },
+    jst : {
+      compile: {
+        options: {
+          amd: true
+        },
+        files: {
+          '<%= appEnv.app %>/scripts/gen/jst.js' : [
+            '<%= appEnv.app %>/scripts/templates/**/*.html'
+          ]
+        }
+      }
+    },
+    ...省略...
+
+    grunt.registerTask('default', ['jst', 'configureProxies', 'connect:server', 'watch']);
+
+```
+
+###requirejsの設定にJSTを追記
+
+```javascript
+require.config({
+  shim: {
+
+  },
+  paths: {
+    backbone: "../bower_components/backbone/backbone",
+    jquery: "../bower_components/jquery/dist/jquery",
+    requirejs: "../bower_components/requirejs/require",
+    underscore: "../bower_components/underscore/underscore",
+    JST: 'gen/jst'
+  },
+  packages: [
+
+  ]
+});
+```
+
+###Todoビューを作成
+
+app/scripts/views/todo.jsを次のように作成
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'JST'
+], function($, _, Backbone, JST) {
+  'use strict';
+
+  var TodoView = Backbone.View.extend({
+
+    tagName:  'li',
+    template: JST['app/scripts/templates/todo.html'],
+    initialize: function() {
+    },
+    render: function() {
+      this.$el.html(this.template(this.model.toJSON()));
+      this.$input = this.$('.todo-input');
+      return this;
+    }
+  });
+  return TodoView;
+});
+```
+
+###AppビューにTodo描画の追加
+
+app/scripts/views/app.js
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'models/todo',
+  'views/todo'
+], function($, _, Backbone, TodoModel, TodoView) {
+  'use strict';
+
+  var AppView = Backbone.View.extend({
+    el: $('#todoapp'),
+    initialize: function() {
+      this.listenTo(this.collection, 'add', this.addOne);
+      this.listenTo(this.collection, 'reset', this.addAll);
+
+      this.collection.fetch();
+    },
+    addOne: function(todo) {
+      var view = new TodoView({
+        model: todo
+      });
+      this.$('#todo-list').append(view.render().el);
+    },
+    addAll: function() {
+      this.collection.each(this.addOne, this);
+    }
+  });
+
+  return AppView;
+});
+```
+
+###Todoの新規追加を実装する
+
+app/scripts/views/app.js
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'models/todo',
+  'views/todo'
+], function($, _, Backbone, TodoModel, TodoView) {
+  'use strict';
+
+  var AppView = Backbone.View.extend({
+    // ...省略...
+    events: {
+      'keypress #new-todo':  'createOnEnter'
+    },
+    initialize: function() {
+      this.input    = this.$('#new-todo');
+
+      // ...省略...
+    },
+    // ...省略...
+    createOnEnter: function(e) {
+      if (e.keyCode != 13) return;
+      var todo = new TodoModel({
+        content: this.input.val(),
+        done:    false
+      });
+      todo.save()
+      .done(_.bind(function() {
+        this.collection.add(todo);
+        this.input.val('');
+      }, this));
+    }
+  });
+
+  return AppView;
+});
+```
+
+###Todoの編集・削除を実装する
+
+app/scripts/views/todo.js
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'JST'
+], function($, _, Backbone, JST) {
+  'use strict';
+
+  var TodoView = Backbone.View.extend({
+    //...省略...
+    events: {
+      'click .check'              : 'toggleDone',
+      'dblclick div.todo-content' : 'edit',
+      'click span.todo-destroy'   : 'clear',
+      'keypress .todo-input'      : 'updateOnEnter',
+      'blur input': 'close'
+    },
+    initialize: function() {
+      this.listenTo(this.model, 'change', this.render);
+      this.listenTo(this.model, 'destroy', this.remove);
+    },
+    //...省略...
+    toggleDone: function() {
+      this.model.toggle();
+    },
+    edit: function() {
+      this.$el.addClass('editing');
+      this.$input.focus();
+    },
+    close: function() {
+      this.model.save({
+        content: this.$input.val()
+      }).done(_.bind(function() {
+        this.$el.removeClass('editing');
+      }, this));
+    },
+    updateOnEnter: function(e) {
+      if (e.keyCode == 13) this.close();
+    },
+    clear: function() {
+      this.model.destroy();
+    }
+  });
+  return TodoView;
+});
+```
+
+###statusテンプレートの作成
+
+app/scriptes/templates/status.html
+
+```html
+<% if (total) { %>
+<span class="todo-count">
+  <span class="number"><%= remaining %></span>
+  <span class="word"><%= remaining == 1 ? 'item' : 'items' %></span> left.
+</span>
+<% } %>
+<% if (done) { %>
+<span class="todo-clear">
+  <a href="#">
+    Clear <span class="number-done"><%= done %></span>
+    completed <span class="word-done"><%= done == 1 ? 'item' : 'items' %></span>
+  </a>
+</span>
+<% } %>
+```
+
+###Appビューにステータス機能追加
+
+app/scripts/views/app.js
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'models/todo',
+  'views/todo',
+  'JST'
+], function($, _, Backbone, TodoModel, TodoView, JST) {
+  'use strict';
+
+  var AppView = Backbone.View.extend({
+    // ...省略...
+    statsTemplate: JST['app/scripts/templates/stats.html'],
+    events: {
+      'keypress #new-todo':  'createOnEnter',
+      'click .todo-clear a': 'clearCompleted'
+    },
+    initialize: function() {
+      this.input    = this.$('#new-todo');
+
+      this.listenTo(this.collection, 'add', this.addOne);
+      this.listenTo(this.collection, 'reset', this.addAll);
+      this.listenTo(this.collection, 'all', this.render);
+
+      this.collection.fetch();
+    },
+    render: function() {
+      this.$('#todo-stats').html(this.statsTemplate({
+        total:      this.collection.length,
+        done:       this.collection.done().length,
+        remaining:  this.collection.remaining().length
+      }));
+    },
+    // ...省略...
+    clearCompleted: function(e) {
+      e.preventDefault();
+      _.each(this.collection.done(), function(todo){
+        todo.destroy();
+      });
+    }
+  });
+
+  return AppView;
+});
+```
+
+###デプロイ用ビルド設定追加
+
+Gruntfile.js
+
+```javascript
+  //...省略...
+  processhtml: {
+      dist: {
+        files: {
+          '<%= appEnv.dist %>/index.html': ['<%= appEnv.app %>/index.html']
+        }
+      }
+    },
+    clean: {
+      files: ['dist']
+    },
+    copy: {
+      dist: {
+        files: [{
+          expand: true,
+          dot: true,
+          cwd: '<%= appEnv.app %>',
+          dest: '<%= appEnv.dist %>',
+          src: [
+            'css/*'
+          ]
+        }]
+      }
+    }
+  }
+  //...省略...
+  grunt.registerTask('build', ['clean', 'copy', 'jst', 'requirejs', 'processhtml']);
+```
+
+###index.htmlにprocessHtmlのマークアップ追加
+
+```html
+  ...省略...
+  <!-- build:js scripts/app.js -->
+  <script type="text/javascript" src="bower_components/requirejs/require.js" data-main="scripts/main.js"></script>
+  <script type="text/javascript" src="scripts/config.js"></script>
+  <!-- /build -->
+  ...省略...
+```
+
+###build
+
+```
+$ grunt build
+```
