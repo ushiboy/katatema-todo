@@ -416,7 +416,7 @@ define([
 });
 ```
 
-###Todoの編集・削除を実装する
+###Todoのdoneトグル機能を追加
 
 app/scripts/views/todo.js
 
@@ -432,20 +432,42 @@ define([
   var TodoView = Backbone.View.extend({
     //...省略...
     events: {
-      'click .check'              : 'toggleDone',
-      'dblclick div.todo-content' : 'edit',
-      'click span.todo-destroy'   : 'clear',
-      'keypress .todo-input'      : 'updateOnEnter',
-      'blur input': 'close'
+      'click .check'              : 'toggleDone'
     },
     initialize: function() {
       this.listenTo(this.model, 'change', this.render);
-      this.listenTo(this.model, 'destroy', this.remove);
     },
     //...省略...
     toggleDone: function() {
       this.model.toggle();
+    }
+  });
+  return TodoView;
+});
+```
+
+###Todoの編集機能を追加
+
+app/scripts/views/todo.js
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'JST'
+], function($, _, Backbone, JST) {
+  'use strict';
+
+  var TodoView = Backbone.View.extend({
+    //...省略...
+    events: {
+      //...省略...
+      'dblclick div.todo-content' : 'edit',
+      'keypress .todo-input'      : 'updateOnEnter',
+      'blur input': 'close'
     },
+    //...省略...
     edit: function() {
       this.$el.addClass('editing');
       this.$input.focus();
@@ -459,7 +481,36 @@ define([
     },
     updateOnEnter: function(e) {
       if (e.keyCode == 13) this.close();
+    }
+  });
+  return TodoView;
+});
+```
+
+###Todoの削除機能を追加
+
+app/scripts/views/todo.js
+
+```javascript
+define([
+  'jquery',
+  'underscore',
+  'backbone',
+  'JST'
+], function($, _, Backbone, JST) {
+  'use strict';
+
+  var TodoView = Backbone.View.extend({
+    //...省略...
+    events: {
+      //...省略...
+      'click span.todo-destroy'   : 'clear'
     },
+    initialize: function() {
+      //...省略...
+      this.listenTo(this.model, 'destroy', this.remove);
+    },
+    //...省略...
     clear: function() {
       this.model.destroy();
     }
@@ -491,7 +542,7 @@ app/scriptes/templates/status.html
 
 ###Appビューにステータス機能追加
 
-app/scripts/views/app.js
+app/scripts/views/app.jsにstats扱い周りを追加する
 
 ```javascript
 define([
@@ -508,17 +559,13 @@ define([
     // ...省略...
     statsTemplate: JST['app/scripts/templates/stats.html'],
     events: {
-      'keypress #new-todo':  'createOnEnter',
+      // ...省略...
       'click .todo-clear a': 'clearCompleted'
     },
     initialize: function() {
-      this.input    = this.$('#new-todo');
-
-      this.listenTo(this.collection, 'add', this.addOne);
-      this.listenTo(this.collection, 'reset', this.addAll);
+      // ...省略...
       this.listenTo(this.collection, 'all', this.render);
-
-      this.collection.fetch();
+      // ...省略...
     },
     render: function() {
       this.$('#todo-stats').html(this.statsTemplate({
@@ -540,13 +587,15 @@ define([
 });
 ```
 
-###デプロイ用ビルド設定追加
+##デプロイ用ビルド設定追加
+
+requirejsとprocessHtmlタスクを組み合わせてデプロイ用ビルドのタスク設定を行う。
 
 Gruntfile.js
 
 ```javascript
-  //...省略...
-  processhtml: {
+    //...省略...
+    processhtml: {
       dist: {
         files: {
           '<%= appEnv.dist %>/index.html': ['<%= appEnv.app %>/index.html']
@@ -568,8 +617,7 @@ Gruntfile.js
           ]
         }]
       }
-    }
-  }
+    },
   //...省略...
   grunt.registerTask('build', ['clean', 'copy', 'jst', 'requirejs', 'processhtml']);
 ```
@@ -590,3 +638,7 @@ Gruntfile.js
 ```
 $ grunt build
 ```
+
+###動作確認
+
+http://localhost:3000/ を開いてビルド後のアプリを表示。
